@@ -4,12 +4,32 @@ from commands.system_info import get_time, get_system_status
 from commands.exec_cmd import run_cmd
 from commands.programs import open_program, close_program
 
-def handle_command(text, config=None):
-    parsed = parse_command(text)
-    if parsed is None:
-        return "Не понимаю команду. Попробуй 'время', 'система', 'открыть notepad', 'закрыть notepad', 'cmd ipconfig'."
+# словарь для статистики команд
+usage = {}
 
-    action, arg = parsed
+def remember(cmd):
+    usage[cmd] = usage.get(cmd, 0) + 1
+
+def get_top_commands(n=3):
+    return sorted(usage, key=usage.get, reverse=True)[:n]
+
+def handle_command(text, config=None):
+    action, arg = parse_command(text)
+
+    # запоминаем команду
+    remember(action)
+
+    if action == "help":
+        return (
+            "📘 Доступные команды:\n"
+            "\n"
+            "• время — показывает текущее время\n"
+            "• система — загрузка CPU/RAM\n"
+            "• открыть <программа> — открывает приложение\n"
+            "• закрыть <программа> — закрывает приложение\n"
+            "• cmd <команда> — выполнить команду CMD\n"
+            "• выход — завершить работу\n"
+        )
 
     if action == "time":
         return get_time()
@@ -20,7 +40,8 @@ def handle_command(text, config=None):
     if action == "cmd":
         if not arg:
             return "Пустая CMD команда."
-        return run_cmd(arg)
+        result = run_cmd(arg)
+        return result if isinstance(result, str) else str(result)
 
     if action == "open":
         if not arg:

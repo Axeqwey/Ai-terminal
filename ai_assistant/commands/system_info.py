@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import platform
+
 import psutil
 from datetime import datetime
 
@@ -6,14 +8,36 @@ def get_time():
     """Возвращает текущее локальное время."""
     return f"Сейчас: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
+
 def get_system_status():
-    """Возвращает простую сводку по CPU и памяти."""
-    cpu = psutil.cpu_percent(interval=0.5)
-    mem = psutil.virtual_memory()
-    total_gb = mem.total / (1024**3)
-    used_percent = mem.percent
-    return (
-        f"CPU загрузка: {cpu:.1f}%\n"
-        f"RAM: {used_percent:.1f}% ({mem.used / (1024**3):.2f} GB / {total_gb:.2f} GB)\n"
-        f"Процессов: {len(psutil.pids())}"
-    )
+    data = {}
+
+    data["cpu_percent"] = psutil.cpu_percent(interval=1)
+    data["ram_percent"] = psutil.virtual_memory().percent
+    data["ram_used"] = psutil.virtual_memory().used
+    data["ram_total"] = psutil.virtual_memory().total
+
+    # Температура
+    try:
+        temps = psutil.sensors_temperatures()
+        data["temperatures"] = {k: [t.current for t in v] for k, v in temps.items()}
+    except:
+        data["temperatures"] = "Не поддерживается"
+
+    # Батарея
+    try:
+        batt = psutil.sensors_battery()
+        if batt:
+            data["battery"] = {
+                "percent": batt.percent,
+                "plugged": batt.power_plugged
+            }
+        else:
+            data["battery"] = "Нет батареи"
+    except:
+        data["battery"] = "Не поддерживается"
+
+    data["os"] = platform.platform()
+    data["time"] = datetime.now().strftime("%H:%M:%S")
+
+    return data

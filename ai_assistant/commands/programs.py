@@ -2,7 +2,9 @@
 import os
 import json
 import psutil
-import platform
+import subprocess
+import signal
+import webbrowser
 from config.settings import PATHS_FILE
 
 def _load_paths():
@@ -14,69 +16,37 @@ def _load_paths():
     except Exception:
         return {}
 
-def open_program(name_or_path):
-    """
-    Открывает программу: либо по ключу из paths.json, либо по прямому пути.
-    Возвращает строку статуса.
-    """
-    paths = _load_paths()
-    target = name_or_path.strip()
 
-    # если имя есть в paths.json
-    if target in paths:
-        target_path = paths[target]
-    else:
-        target_path = target  # считаем, что это путь или имя исполняемого файла
 
-    # Windows: os.startfile, unix: subprocess
-    try:
-        if platform.system().lower().startswith("win"):
-            # os.startfile работает с путём или ассоциацией
-            os.startfile(target_path)
-        else:
-            # попытаемся выполнить в фоне
-            import subprocess
-            subprocess.Popen([target_path])
-        return f"Открываю: {target_path}"
-    except Exception as e:
-        return f"Не получилось открыть '{target}': {e}"
+def open_program(path):
+    # URL
+    if path.startswith("http://") or path.startswith("https://"):
+        webbrowser.open(path)
+        return f"Открываю URL: {path}"
 
-def close_program(name_or_pid):
-    """
-    Закрывает процесс по имени или pid.
-    Если передано число — интерпретируется как PID.
-    Иначе — имя процесса (частичное совпадение допускается).
-    """
-    target = str(name_or_pid).strip()
+    # Файл/папка/EXE
+    if os.path.exists(path):
+        subprocess.Popen([path], shell=True)
+        return f"Открываю: {path}"
+    return "Путь не найден"
 
-    # если PID
-    if target.isdigit():
-        pid = int(target)
-        try:
-            p = psutil.Process(pid)
-            p.terminate()
-            return f"Отправлен сигнал завершения процессу PID={pid}."
-        except Exception as e:
-            return f"Не удалось завершить PID={pid}: {e}"
+def close_program(name):
+    closed = False
 
-    # иначе ищем по имени (частичное совпадение)
-    matched = []
     for proc in psutil.process_iter(['pid', 'name']):
-        try:
-            if target.lower() in (proc.info.get('name') or '').lower():
-                matched.append(proc)
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
+        if name.lower() in proc.info['name'].lower():
+            try:
+                proc.terminate()     # Мягкое завершение
+                closed = True
+            except:
+                pass
 
-    if not matched:
-        return f"Процессы с именем, содержащим '{target}', не найдены."
+    if not closed:
+        # Пробуем kill -9
+        for proc in psutil.process_iter(['pid', 'name']):
+            if name.lower() in proc.info['name'].lower():
+                os.kill(proc.pid, signal.SIGKILL)
+                closed = True
 
-    results = []
-    for p in matched:
-        try:
-            p.terminate()
-            results.append(f"{p.info.get('name')} (PID={p.info.get('pid')}) — завершён.")
-        except Exception as e:
-            results.append(f"{p.info.get('name')} (PID={p.info.get('pid')}) — не завершён: {e}")
+    return "Закрыто" if closed else "Процесс не найден"
 
-    return "\n".join(results)
